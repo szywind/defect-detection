@@ -1,222 +1,269 @@
-﻿#include <iostream>
+#define _USE_MATH_DEFINES
+
+#include <iostream>
 #include <fstream>
 #include <string>
 #include <opencv/cv.h>
 #include <opencv/highgui.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <cmath>
+#include "Defect.h"
+#include <queue>
 
 using namespace cv;
 using namespace std;
 
-void getContours(String path);
-void getContours(Mat image);
-void detectLines(Mat image);
+vector<vector<Point> > getContours(Mat image, double g_thread = 50);
+void displayResult(Mat image, vector<vector<Point>> contours, String outputImageName, double field_width, double defect_size);
+float bfs(Mat image, Point2f center);
+
+float g_thresh;
 
 int main(int argc, char* argv[])
 {
-	// initialization
-	//string imageName = "..\\data\\TP-0329\\1\\Main.IMAGE_ID_GREY.bmp";
-	string imageName = "..\\data\\real\\1.bmp"; //"..\\data\\test_img\\1.bmp";
+	// load the image
+	string inputImageName, outputImageName;
+	double defect_size, field_width;
+	if (argc != 5 && argc != 6)
+	{
+		cout << "Usage: DefectDetection.exe <src image path> <dst image path> <field width(in mm)> <threshold of the defects to be detected(in mm)> [<threshold for binarilization>(default is 50)]" << endl;
+		return -1;
+	} else {
+		inputImageName = argv[1]; //"..\\data\\real\\1.bmp";
+		outputImageName = argv[2]; //"..\\result\\1.bmp";
+		field_width = atof(argv[3]);
+		defect_size = atof(argv[4]);
+		g_thresh = (argc == 6) ? atof(argv[5]) : 50;
+	}
 
-	Mat img = imread(imageName, CV_LOAD_IMAGE_GRAYSCALE);
+	Mat image = imread(inputImageName, CV_LOAD_IMAGE_GRAYSCALE);
+
+	// equalization
+	Mat temp;
+	
+	//equalizeHist(image, temp);
+	double minVal, maxVal;
+	minMaxLoc(image, &minVal, &maxVal);
+	image.convertTo(temp, CV_8UC1, 255 / (maxVal-minVal), -minVal * 255 / (maxVal-minVal));
+	
+
 	/*
-	int a = img.type();
-	int ch = img.channels();
-	bool flag = (a == CV_8UC1);
-	imshow("input", img);
-	system("pause");
+	for (int i = 0; i < temp.rows; i++){
+		for (int j = 0; j < temp.cols; j++){
+			temp.at<uchar>(i, j) = int(image.at<uchar>(i,j) - minVal) / int(maxVal - minVal);
+		}
+	}
 	*/
-	imwrite("..\\data\\1_0.bmp", img);
+	
+	
+	
+	//Scalar mean, stddev;
+	//meanStdDev(image, mean, stddev);
+	//image.convertTo(temp, CV_32FC1, 1.0 / stddev(0), -mean(0) / stddev(0));
 
-	// equalize
-	equalizeHist(img, img);
-	imwrite("..\\data\\1_1.bmp", img);
+	//imwrite(outputImageName, temp);
+	
+	// gaussian filtering
+	GaussianBlur(temp, temp, Size(11,11), 5);
 
-	// median filter
-	GaussianBlur(img, img, Size(9,9), 5);
-	//medianBlur(img, img, 3);
-	//blur(img, img, Size(9, 9));
-	imwrite("..\\data\\1_2.bmp", img);
+	// contour detection
+	vector<vector<Point> > contours = getContours(temp, g_thresh);
 
-
-
-	// getContour
-	// C interface
-	//getContours("..\\data\\1_2.bmp");
-	// C++ interface
-	getContours(img);
-
-	//IplImage *src = cvLoadImage(path.c_str, CV_LOAD_IMAGE_GRAYSCALE);
+	// display result
+	//String outputImageName = inputImageName.substr(0, inputImageName.rfind(".")) + ".bmp";
+	displayResult(image, contours, outputImageName, field_width, defect_size);
 
 	return 0;
 }
 
 
-void getContours(String path)
-{
-	IplImage *src = cvLoadImage(path.c_str(), CV_LOAD_IMAGE_GRAYSCALE);
-	CvMemStorage *storage = cvCreateMemStorage();
-	CvSeq *seq = NULL;
-	int g_thresh = 128;
-
-	cvThreshold(src, src, g_thresh, 255, CV_THRESH_BINARY);
-	cvSaveImage("..\\data\\1_3.bmp", src);
-
-	int cnt = cvFindContours(src, storage, &seq);
-	seq = seq->h_next;
-	double length = cvArcLength(seq);
-	double area = cvContourArea(seq);
-	CvRect rect = cvBoundingRect(seq, 1);
-	CvBox2D box = cvMinAreaRect2(seq, NULL);
-
-	cout << "Length = " << length << endl;
-	cout << "Area = " << area << endl;
-
-	IplImage *dst = cvCreateImage(cvGetSize(src), 8, 3); cvZero(dst);
-	cvDrawContours(dst, seq, CV_RGB(255, 0, 0), CV_RGB(255, 0, 0), 0);
-	cvRectangleR(dst, rect, CV_RGB(0, 255, 0));
-	cvShowImage("dst", dst);
-	cvWaitKey();
-
-	CvPoint2D32f center;
-	float radius;
-	cvMinEnclosingCircle(seq, &center, &radius);
-	cvCircle(dst, cvPointFrom32f(center), cvRound(radius), CV_RGB(100, 100, 100));
-	cvShowImage("dst", dst);
-	cvWaitKey();
-
-	/*
-	CvBox2D ellipse = cvFitEllipse2(seq);
-	cvEllipseBox(dst, ellipse, CV_RGB(255, 255, 0));
-	cvShowImage("dst", dst);
-	cvWaitKey();
-
-	//绘制外接最小矩形
-	CvPoint2D32f pt[4];
-	cvBoxPoints(box, pt);
-	for (int i = 0; i<4; ++i){
-		cvLine(dst, cvPointFrom32f(pt[i]), cvPointFrom32f(pt[((i + 1) % 4) ? (i + 1) : 0]), CV_RGB(0, 0, 255));
-	}
-	cvShowImage("dst", dst);
-	cvWaitKey();
-	*/
-	cvSaveImage("..\\data\\1_4.bmp", dst);
-	cvReleaseImage(&src);
-	cvReleaseImage(&dst);
-	cvReleaseMemStorage(&storage);
-
-}
-
-void getContours(Mat image)
+vector<vector<Point> > getContours(Mat image, double g_thresh)
 {
 	if (image.channels() == 3)
 	{
 		cvtColor(image, image, CV_BGR2GRAY);
 	}
-	vector<vector<Point>> contours;
-	
-	int g_thresh = 80;
-	// binaralize
-	// threshold
-	threshold(image, image, g_thresh, 255, CV_THRESH_BINARY);
-	bitwise_xor(image, Scalar(255), image);
-	imwrite("..\\data\\1_3_2.bmp", image);
-	// canny
-	//detectLines(image);
+	vector<vector<Point> > contours;
 
+	// binaralize with tuned threshold
+	threshold(image, image, g_thresh, 255, CV_THRESH_BINARY_INV);
+	//imwrite(name, image);
+
+	//bitwise_xor(image, Scalar(255), image);
 	findContours(image, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
-	
-	int max_index = 0;
-	double max_area = 0;
-	for (int i = 0; i < contours.size(); i++) {
-		double length = arcLength(contours[i], true);
-		double area = contourArea(contours[i]);
-		if (area > max_area) {
-			max_area = area;
-			max_index = i;
-		}
-	}
-	double length = arcLength(contours[max_index], true);
-	double area = contourArea(contours[max_index]);
 
-	CvRect rect = boundingRect(contours[max_index]);
-	CvBox2D box = minAreaRect(contours[max_index]);
-
-	cout << "Length = " << length << endl;
-	cout << "Area = " << area << endl;
-
-	//Mat dst = Mat(image.size(), CV_8U, Scalar(0));
-	//drawContours(dst, contours, -1, CV_RGB(255, 0, 0), 2);
-
-	//rectangle(dst, rect, CV_RGB(0, 255, 0));
-	//imshow("dst", dst);
-	//cvWaitKey();
-
-	Point2f center;
-	float radius;
-	minEnclosingCircle(contours[max_index], center, radius);
-	circle(image, cvPointFrom32f(center), cvRound(radius), CV_RGB(100, 100, 100));
-	//imshow("dst", dst);
-	cvWaitKey();
-
-	/*
-	CvBox2D ellipse = cvFitEllipse2(seq);
-	cvEllipseBox(dst, ellipse, CV_RGB(255, 255, 0));
-	cvShowImage("dst", dst);
-	cvWaitKey();
-
-	//绘制外接最小矩形
-	CvPoint2D32f pt[4];
-	cvBoxPoints(box, pt);
-	for (int i = 0; i<4; ++i){
-	cvLine(dst, cvPointFrom32f(pt[i]), cvPointFrom32f(pt[((i + 1) % 4) ? (i + 1) : 0]), CV_RGB(0, 0, 255));
-	}
-	cvShowImage("dst", dst);
-	cvWaitKey();
-	*/
-	imwrite("..\\data\\1_4_2.bmp", image);
-
+	return contours;
 }
 
-void detectLines(Mat image)
+bool compDefect(const Defect& df1, const Defect& df2)
 {
+	return df2 < df1;
+}
 
-	Mat dst, cdst;
-	if (image.channels() == 3)
-	{
-		Canny(image, dst, 50, 200, 3);
+bool isOnContour(Mat image, int row, int col) {
+	Mat patch(image, Range(row-2,row+3), Range(col-2,col+3));
+	Scalar mean, std;
+	meanStdDev(patch, mean, std);
+	if (mean(0) < 0.8*image.at<uchar>(row, col) && std(0) > 0.1){
+		return false;
 	}
-	else if (image.channels() == 1)
-	{
-		dst = image;
+	else {
+		return true;
 	}
-	//Canny(image, dst, 50, 200, 3);
-	cvtColor(dst, cdst, CV_GRAY2BGR);
-	//cdst = dst;
-	vector<Vec2f> lines;
-	// detect lines
-	HoughLines(dst, lines, 1, CV_PI / 180, int(0.9*dst.cols), 0, 0);
-	// draw lines
-	for (size_t i = 0; i < lines.size(); i++)
-	{
-		float rho = lines[i][0], theta = lines[i][1];
-		//if (theta>CV_PI / 180 * 80 && theta < CV_PI / 180 * 100)
-		{
-			Point pt1, pt2;
-			double a = cos(theta), b = sin(theta);
-			double x0 = a*rho, y0 = b*rho;
-			pt1.x = cvRound(x0 - 1000 * b);
-			pt1.y = cvRound(y0 + 1000 * a);
-			pt2.x = cvRound(x0 + 1000 * b);
-			pt2.y = cvRound(y0 - 1000 * a);
-			line(cdst, pt1, pt2, Scalar(0, 0, 255), 1, CV_AA);
-			//line(cdst, pt1, pt2, Scalar(255), 1, CV_AA);
+}
 
+float bfs(Mat image, Point2f center, float diameter){
+	queue<Point2f> myqueue;
+	myqueue.push(center);
+	map<vector<int>, bool> visited;
+	float ans = 0;
+	while (!myqueue.empty()){
+		int n = myqueue.size();
+		for (int i = 0; i < n; i++){
+			Point2f pt = myqueue.front();
+			myqueue.pop();
+			int r = round(pt.y), c = round(pt.x);
+			if (visited.find(vector<int>{c, r-1}) == visited.end() && isOnContour(image, r-1, c)){
+				myqueue.push(Point2f(c, r-1));
+				visited[vector<int>{c, r-1}] = true;
+				float temp = (c - center.x)*(c - center.x) + (r - 1 - center.y) * (r - 1 - center.y);
+				if ( temp > 0.25*ans*ans){
+					ans = 2 * sqrt(temp);
+				}
+			}
+			if (visited.find(vector<int>{c, r + 1}) == visited.end() && isOnContour(image, r + 1, c)){
+				myqueue.push(Point2f(c, r + 1));
+				visited[vector<int>{c, r + 1}] = true;
+				float temp = (c - center.x)*(c - center.x) + (r + 1 - center.y) * (r + 1 - center.y);
+				if (temp > 0.25*ans*ans){
+					ans = 2 * sqrt(temp);
+				}
+			}
+			if (visited.find(vector<int>{c-1, r}) == visited.end() && isOnContour(image, r, c-1)){
+				myqueue.push(Point2f(c-1, r));
+				visited[vector<int>{c-1, r}] = true;
+				float temp = (c-1 - center.x)*(c-1 - center.x) + (r - center.y) * (r - center.y);
+				if (temp > 0.25*ans*ans){
+					ans = 2 * sqrt(temp);
+				}
+			}
+			if (visited.find(vector<int>{c + 1, r}) == visited.end() && isOnContour(image, r, c + 1)){
+				myqueue.push(Point2f(c + 1, r));
+				visited[vector<int>{c + 1, r}] = true;
+				float temp = (c + 1 - center.x)*(c + 1 - center.x) + (r - center.y) * (r - center.y);
+				if (temp > 0.25*ans*ans){
+					ans = 2 * sqrt(temp);
+				}
+			}
 		}
 	}
-	//imshow("source", image);
-	//imshow("detected lines", cdst);
-	imwrite("..\\data\\111.bmp", dst);
-	imwrite("..\\data\\222.bmp", cdst);
+	return ans;
+}
+
+
+void displayResult(Mat image, vector<vector<Point>> contours, String outputImageName, double field_width, double defect_size)
+{
+	Mat result;
+	cvtColor(image, result, CV_GRAY2BGR);
+	int count = 0;
+
+	// find all detects larger than the threshold specified by the argument defect_size
+	cout << "Detecting defects larger than " << defect_size << " mm ..." << endl;
+	double scale_factor = field_width / image.cols;
+	vector<Defect> defects;
+	for (int i = 0; i < int(contours.size()); i++) {
+		double length = arcLength(contours[i], true);
+		double area = contourArea(contours[i]);
+
+		Point2f center;
+		float radius;
+		minEnclosingCircle(contours[i], center, radius);
+
+		//float ans = bfs(image, center);
+		float diameter = 2 * radius;
+		if (diameter * scale_factor < defect_size)
+		{
+			
+			continue;
+		}
+
+		//cout << "diameter = " << diameter << endl;
+		//float ans = bfs(image, center, diameter);
+
+
+
+		/*
+		int row = round(center.y), col = round(center.x);
+		Mat patch(image, Range(row - 50, row + 51), Range(col - 50, col + 51));
+		imwrite(" ..\\data\\real\\tmp.bmp", patch);
+		
+		resize(patch, patch, Size(1010, 1010), CV_INTER_LINEAR);
+		Mat temp;
+		equalizeHist(patch, temp);
+		GaussianBlur(temp, temp, Size(11, 11), 3);
+		vector<vector<Point> > contours = getContours(temp, g_thresh);
+		
+		// find the largest defect
+		int max_index = 0;
+		double max_area = 0;
+		for (int i = 0; i < contours.size(); i++) {
+			double length = arcLength(contours[i], true);
+			double area = contourArea(contours[i]);
+			if (area > max_area) {
+				max_area = area;
+				max_index = i;
+			}
+		}
+		Point2f c;
+		float refined_radius;
+		minEnclosingCircle(contours[max_index], c, refined_radius);
+		
+		double refined_diameter = 2 * refined_radius * 0.1;
+
+		//cout << int(image.at<uchar>(int(center.y), int(center.x))) << endl;
+		count++;
+
+		CvRect rect = boundingRect(contours[i]);
+		CvBox2D box = minAreaRect(contours[i]);
+
+		//cout << "Length = " << length << endl;
+		//cout << "Area = " << area << endl;
+		*/
+		count++;
+
+		circle(result, cvPointFrom32f(center), cvRound(0.5 * diameter), CV_RGB(255, 0, 0));
+
+		defects.push_back(Defect(center, diameter));
+	}
+	cout << count << " defects are detected" << endl;
+	
+	sort(defects.begin(), defects.end(), compDefect);
+
+	for (int i = 0; i < defects.size(); i++)
+	{
+		float diameter = defects[i].getDiameter();
+		Point2f center = defects[i].getCenter();
+
+		ostringstream ss;
+		//ss.precision(3);
+		//ss.setf(ios::fixed);
+		ss << setiosflags(ios::fixed) << setprecision(3) << (diameter * scale_factor);
+
+		bool showTextBottom = center.y < 100;
+		bool showTextRight = image.cols - center.x > 300;
+		int offset_vert = 2 * showTextBottom - 1;
+		if (showTextRight) {
+			putText(result, to_string(i + 1) + ": ", Point(center.x + diameter + 5, center.y + offset_vert * diameter + showTextBottom * 25), CV_FONT_HERSHEY_COMPLEX, 1, CV_RGB(0, 0, 255));
+			putText(result, string(ss.str()) + "mm", Point(center.x + diameter + 45, center.y + offset_vert * diameter + showTextBottom * 25), CV_FONT_HERSHEY_COMPLEX, 1, CV_RGB(255, 0, 0));
+		}
+		else {
+			putText(result, to_string(i + 1) + ": ", Point(center.x - diameter - 190, center.y + offset_vert * diameter + showTextBottom * 25), CV_FONT_HERSHEY_COMPLEX, 1, CV_RGB(0, 0, 255));
+			putText(result, string(ss.str()) + "mm", Point(center.x - diameter - 150, center.y + offset_vert * diameter + showTextBottom * 25), CV_FONT_HERSHEY_COMPLEX, 1, CV_RGB(255, 0, 0));
+		}
+		cout << "defect " << (i+1) << ": size(diameter) is " << string(ss.str()) << "mm" << endl;
+	}
+
+	imwrite(outputImageName, result);
+	cout << "SRC:End" << endl;
 }
