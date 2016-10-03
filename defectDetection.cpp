@@ -237,6 +237,8 @@ bool isAllWhite(Mat image, int r){
 }
 
 void refineDefectSize(Mat image, Defect& defect, int y0, int x0){
+	Mat result;
+	image.copyTo(result);
 	processImage(image, g_thresh, 1);
 	float r;
 	float refined_radius, radius;
@@ -249,16 +251,17 @@ void refineDefectSize(Mat image, Defect& defect, int y0, int x0){
 		iter++;
 	}
 
-	double refined_diameter = 2 * refined_radius + 1;
+	double refined_diameter = 2 * refined_radius;
 
+	cout<<defect.getDiameter() << " -> " << refined_diameter << endl;
+	/*
 	ostringstream ss;
 	ss << defect.getId();
 
-	Mat result;
-	cvtColor(image, result, CV_GRAY2BGR);
-	/*
+	cvtColor(result, result, CV_GRAY2BGR);
+	
 	imwrite(string("..\\data\\result\\") + string(ss.str()) + string(".png"), result);
-	cout<<defect.getDiameter() << " -> " << refined_diameter << endl;
+	
 	namedWindow("result", 1);
 	circle(result, Point2f(image.cols/2.0, image.rows/2.0), refined_radius, CV_RGB(255, 0, 0));
 	imshow("result", result);
