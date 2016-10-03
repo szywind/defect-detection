@@ -44,9 +44,7 @@ int main(int argc, char* argv[])
 	Mat image = imread(inputImageName, CV_LOAD_IMAGE_GRAYSCALE);
 	
 	Mat temp;
-	double minVal, maxVal;
-	minMaxLoc(image, &minVal, &maxVal);
-	image.convertTo(temp, CV_8UC1, 255 / (maxVal-minVal), -minVal * 255 / (maxVal-minVal));
+	image.copyTo(temp);
 
 	//Scalar mean, stddev;
 	//meanStdDev(image, mean, stddev);
@@ -71,8 +69,11 @@ void processImage(Mat& image, double g_thresh, int mode)
 		cvtColor(image, image, CV_BGR2GRAY);
 	}
 
+	double minVal, maxVal;
+	minMaxLoc(image, &minVal, &maxVal);
+	image.convertTo(image, CV_8UC1, 255 / (maxVal-minVal), -minVal * 255 / (maxVal-minVal));
+
 	switch (mode){
-		// binaralize with tuned threshold
 	case 1:
 		equalizeHist(image, image);
 		GaussianBlur(image, image, Size(5, 5), 3);
@@ -248,19 +249,22 @@ void refineDefectSize(Mat image, Defect& defect, int y0, int x0){
 		iter++;
 	}
 
-	double refined_diameter = 2 * refined_radius + 2;
+	double refined_diameter = 2 * refined_radius + 1;
 
 	ostringstream ss;
 	ss << defect.getId();
 
 	Mat result;
 	cvtColor(image, result, CV_GRAY2BGR);
+	/*
 	imwrite(string("..\\data\\result\\") + string(ss.str()) + string(".png"), result);
 	cout<<defect.getDiameter() << " -> " << refined_diameter << endl;
 	namedWindow("result", 1);
 	circle(result, Point2f(image.cols/2.0, image.rows/2.0), refined_radius, CV_RGB(255, 0, 0));
 	imshow("result", result);
 	waitKey();
+	*/
+	
 	defect.setDiameter(refined_diameter);
 }
 
