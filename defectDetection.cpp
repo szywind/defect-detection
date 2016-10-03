@@ -14,7 +14,8 @@
 using namespace cv;
 using namespace std;
 
-vector<vector<Point> > getContours(Mat image, double g_thread = 50, int mode = 0);
+void processImage(Mat& image, double g_thresh = 50, int mode = -1);
+vector<vector<Point> > getContours(Mat image);
 void displayResult(Mat image, vector<vector<Point>> contours, String outputImageName, double field_width, double defect_size);
 bool isAllWhite(Mat image, int r);
 void refineDefectSize(Mat image, Defect& defect, int y0, int x0);
@@ -51,63 +52,66 @@ int main(int argc, char* argv[])
 	//meanStdDev(image, mean, stddev);
 	//image.convertTo(temp, CV_32FC1, 1.0 / stddev(0), -mean(0) / stddev(0));
 
+	processImage(temp, g_thresh);
 	
-	// 1.
-	equalizeHist(temp, temp);
-	
-	// 2.
-	GaussianBlur(temp, temp, Size(11,11), 5);
+	vector<vector<Point> > contours = getContours(temp);
 
-	// 3.
-	vector<vector<Point> > contours = getContours(temp, g_thresh);
-
-	// 4.
 	//String outputImageName = inputImageName.substr(0, inputImageName.rfind(".")) + ".bmp";
 	displayResult(image, contours, outputImageName, field_width, defect_size);
 
 	return 0;
 }
 
-
-vector<vector<Point> > getContours(Mat image, double g_thresh, int mode)
+void processImage(Mat& image, double g_thresh, int mode)
 {
+	string info;
+
 	if (image.channels() == 3)
 	{
 		cvtColor(image, image, CV_BGR2GRAY);
 	}
-	vector<vector<Point> > contours;
 
 	switch (mode){
 		// binaralize with tuned threshold
 	case 1:
+		equalizeHist(image, image);
+		GaussianBlur(image, image, Size(5, 5), 3);
 		threshold(image, image, 0, 255, CV_THRESH_BINARY_INV|CV_THRESH_OTSU);
-		namedWindow("OTSU", 1);
-		imshow("OTSU", image);
-		waitKey();
+		info = "Use OTSU binarilization";
 		break;
 	case 2:
-		namedWindow("Canny",2);
-		Canny(image, image, 40, 120, 3, true);
-		imshow("Canny", image);
-		waitKey();
+		Canny(image, image, 40, 160, 3, true);
+		info = "Use Canny edge detection";
 		break;
 	case 3:
-		//AdaptiveThreshold(image, )
+		adaptiveThreshold(image, image, 255, CV_ADAPTIVE_THRESH_GAUSSIAN_C, CV_THRESH_BINARY_INV, 5, 5);
+		info = "Use adaptive thresholding";
 		break;
 	case 0:
+		equalizeHist(image, image);
+		GaussianBlur(image, image, Size(5, 5), 3);
 		threshold(image, image, g_thresh, 255, CV_THRESH_BINARY_INV);
+		info = "Use fine thresholding";
 		break;
 	default:
-		namedWindow("Normal",3);
+		equalizeHist(image, image);
+		GaussianBlur(image, image, Size(11,11), 5);
 		threshold(image, image, g_thresh, 255, CV_THRESH_BINARY_INV);
-		imshow("Normal", image);
-		waitKey();
+		info = "Use coarse thresholding";
+		break;
 	}
-	//imwrite(name, image);
-
+	
 	//bitwise_xor(image, Scalar(255), image);
- 	findContours(image, contours, CV_RETR_LIST, CV_CHAIN_APPROX_NONE); //CV_RETR_EXTERNAL
+	
+	cout<<info<<endl;
+	//imshow("processed image", image);
+	waitKey();
+}
 
+vector<vector<Point> > getContours(Mat image)
+{
+	vector<vector<Point> > contours;
+ 	findContours(image, contours, CV_RETR_LIST, CV_CHAIN_APPROX_NONE); //CV_RETR_EXTERNAL
 	return contours;
 }
 
@@ -153,10 +157,13 @@ void blobDetection(Mat image, Defect& defect, int y0, int x0){
 	// find contours
 	//resize(patch, patch, Size(1010, 1010), CV_INTER_LINEAR);
 	
-	equalizeHist(image, image);
-	GaussianBlur(image, image, Size(5, 5), 3);
+	processImage(image, g_thresh, 2);
+	//imshow("1",image);
+	//waitKey();
+	vector<vector<Point> > contours = getContours(image);
+	//imshow("2",image);
+	//waitKey();
 /////////////////////////////////////////////////////////////////////////////////////////////////////
-	vector<vector<Point> > contours = getContours(image, g_thresh, 0);
 	
 	float r;
 	Point2f c;
@@ -176,15 +183,18 @@ void blobDetection(Mat image, Defect& defect, int y0, int x0){
 		}
 	}
 	*/
-	float minDist = refined_radius/2;
+	float minDist = refined_radius;// /2;
 	int minId = -1;
+
+	float maxRadius = refined_radius;
 	
 	for (int i = 0; i < contours.size(); i++){
 		minEnclosingCircle(contours[i], c, r);
 		Point2f dist = Point2f(c.y - image.rows / 2.0, c.x - image.cols / 2.0);
 		//float temp = norm(Point(3,4));
-		if (norm(dist) < minDist && r < defect.getDiameter()){
-			minDist = norm(dist);
+		if (norm(dist) < minDist && r < defect.getDiameter() && r > maxRadius){
+			//minDist = norm(dist);
+			maxRadius = r;
 			minId = i;
 			refined_radius = r;
 			refined_center = c;
@@ -212,6 +222,7 @@ void blobDetection(Mat image, Defect& defect, int y0, int x0){
 	defect.setDiameter(refined_diameter);
 	defect.setCenter(Point2f(refined_center.x + x0, refined_center.y + y0));
 }
+
 bool isAllWhite(Mat image, int r){
 	int cx = int(image.cols/2.0+0.5), cy = int(image.rows/2.0+0.5);
 	for(int i=cx-r; i<=cx+r; i++){
@@ -225,10 +236,7 @@ bool isAllWhite(Mat image, int r){
 }
 
 void refineDefectSize(Mat image, Defect& defect, int y0, int x0){
-	equalizeHist(image, image);
-	GaussianBlur(image, image, Size(5, 5), 3);
-	threshold(image, image, 0, 255, CV_THRESH_BINARY_INV|CV_THRESH_OTSU);
-		
+	processImage(image, g_thresh, 1);
 	float r;
 	float refined_radius, radius;
 	refined_radius = radius = defect.getDiameter()/2;
@@ -240,19 +248,19 @@ void refineDefectSize(Mat image, Defect& defect, int y0, int x0){
 		iter++;
 	}
 
-	double refined_diameter = 2 * refined_radius;
+	double refined_diameter = 2 * refined_radius + 2;
 
 	ostringstream ss;
 	ss << defect.getId();
 
 	Mat result;
 	cvtColor(image, result, CV_GRAY2BGR);
-	//imwrite(string("..\\data\\result\\") + string(ss.str()) + string(".png"), result);
-	//cout<<defect.getDiameter() << " -> " << refined_diameter << endl;
-	//namedWindow("result", 1);;
-	//circle(result, cvPointFrom32f(defect.getCenter()), refined_radius, CV_RGB(255, 0, 0));
-	//imshow("result", result);
-	//waitKey();
+	imwrite(string("..\\data\\result\\") + string(ss.str()) + string(".png"), result);
+	cout<<defect.getDiameter() << " -> " << refined_diameter << endl;
+	namedWindow("result", 1);
+	circle(result, Point2f(image.cols/2.0, image.rows/2.0), refined_radius, CV_RGB(255, 0, 0));
+	imshow("result", result);
+	waitKey();
 	defect.setDiameter(refined_diameter);
 }
 
@@ -325,5 +333,5 @@ void displayResult(Mat image, vector<vector<Point>> contours, String outputImage
 	}
 
 	imwrite(outputImageName, result);
- 	cout << "SRC:End" << endl;
+   	cout << "SRC:End" << endl;
 }
