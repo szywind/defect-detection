@@ -60,6 +60,11 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
+void sharpen(Mat src, Mat & dst){
+	Mat kernel = (Mat_<float>(3,3) << 0, -1, 0, -1, 5, -1, 0, -1, 0);
+	filter2D(src, dst, -1, kernel);
+}
+
 void processImage(Mat& image, double g_thresh, int mode)
 {
 	string info;
@@ -68,12 +73,53 @@ void processImage(Mat& image, double g_thresh, int mode)
 	{
 		cvtColor(image, image, CV_BGR2GRAY);
 	}
-
+	Mat element = getStructuringElement(MORPH_ELLIPSE, Size(5,5));
 	double minVal, maxVal;
 	minMaxLoc(image, &minVal, &maxVal);
 	image.convertTo(image, CV_8UC1, 255 / (maxVal-minVal), -minVal * 255 / (maxVal-minVal));
 
 	switch (mode){
+	case 99:
+#ifdef _DEBUG
+		imshow("original", image);
+		waitKey();
+#endif
+		for(int i=0; i<1; i++)
+		morphologyEx(image, image, MORPH_CLOSE, element);//--MORPH_OPEN, --MORPH_BLACKHAT, --MORPH_TOPHAT, -MORPH_GRADIENT, MORPH_CLOSE
+
+#ifdef _DEBUG
+		imshow("morph", image);
+		waitKey();
+#endif
+		//equalizeHist(image, image);
+#ifdef _DEBUG
+		imshow("equalization", image);
+		waitKey();
+#endif
+		//GaussianBlur(image, image, Size(3, 3), 1);
+#ifdef _DEBUG
+		imshow("after blurred", image);
+		waitKey();
+#endif
+		//sharpen(image, image);
+#ifdef _DEBUG
+		imshow("after sharpening", image);
+		waitKey();
+#endif
+
+		/*
+		Laplacian(image, image, -1, 3);
+		imshow("after Laplace", image);
+		waitKey();
+		*/
+
+		threshold(image, image, 0, 255, CV_THRESH_BINARY_INV|CV_THRESH_OTSU);
+#ifdef _DEBUG
+		imshow("after OTSU", image);
+		waitKey();
+#endif
+		info = "Use OTSU binarilization";
+		break;
 	case 1:
 		equalizeHist(image, image);
 		GaussianBlur(image, image, Size(5, 5), 3);
@@ -96,17 +142,18 @@ void processImage(Mat& image, double g_thresh, int mode)
 		break;
 	default:
 		equalizeHist(image, image);
-		GaussianBlur(image, image, Size(11,11), 5);
+		GaussianBlur(image, image, Size(9,9), 5);
+		sharpen(image, image);
 		threshold(image, image, g_thresh, 255, CV_THRESH_BINARY_INV);
 		info = "Use coarse thresholding";
 		break;
 	}
 	
 	//bitwise_xor(image, Scalar(255), image);
-	
+#ifdef _DEBUG
 	cout<<info<<endl;
-	//imshow("processed image", image);
-	waitKey();
+#endif
+	
 }
 
 vector<vector<Point> > getContours(Mat image)
@@ -225,12 +272,16 @@ void blobDetection(Mat image, Defect& defect, int y0, int x0){
 }
 
 bool isAllWhite(Mat image, int r){
+	int count = 0;
 	int cx = int(image.cols/2.0+0.5), cy = int(image.rows/2.0+0.5);
 	for(int i=cx-r; i<=cx+r; i++){
 		for(int j=cy-r; j<=cy+r; j++){
 			if(i<0 || i>=image.rows || j<0 || j>=image.cols) return false;
 			if(norm(Point2f(i-cx, j-cy)) >= r) continue;
-			if(image.at<uchar>(i,j) == 0) return false; 
+			if(image.at<uchar>(i,j) == 0) {
+				count ++;
+			}
+			if(count>7) return false; 
 		}
 	}
 	return true;
@@ -239,22 +290,22 @@ bool isAllWhite(Mat image, int r){
 void refineDefectSize(Mat image, Defect& defect, int y0, int x0){
 	Mat result;
 	image.copyTo(result);
-	processImage(image, g_thresh, 1);
+	//------------------------------------------------------------------------------------------------------------------
+	processImage(image, g_thresh, 99);
 	float r;
 	float refined_radius, radius;
 	refined_radius = radius = defect.getDiameter()/2;
-	int iter = 0;
-	while(iter<21){
-		r = radius*(1+iter*0.1);
-		if(!isAllWhite(image, r)) break;
+	for(int iter = 0; iter<30; iter++){
+		r = radius*(0.5 + iter*0.1);
+		if(!isAllWhite(image, r)) continue;
 		refined_radius = r;
-		iter++;
 	}
 
 	double refined_diameter = 2 * refined_radius;
 
+#ifdef _DEBUG
 	cout<<defect.getDiameter() << " -> " << refined_diameter << endl;
-	/*
+	
 	ostringstream ss;
 	ss << defect.getId();
 
@@ -266,7 +317,7 @@ void refineDefectSize(Mat image, Defect& defect, int y0, int x0){
 	circle(result, Point2f(image.cols/2.0, image.rows/2.0), refined_radius, CV_RGB(255, 0, 0));
 	imshow("result", result);
 	waitKey();
-	*/
+#endif
 	
 	defect.setDiameter(refined_diameter);
 }
