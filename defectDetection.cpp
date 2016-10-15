@@ -91,7 +91,7 @@ void processImage(Mat& image, double g_thresh, int mode)
 		imshow("morph", image);
 		waitKey();
 #endif
-		equalizeHist(image, image);
+		//equalizeHist(image, image);
 #ifdef _DEBUG
 		imshow("equalization", image);
 		waitKey();
@@ -142,7 +142,7 @@ void processImage(Mat& image, double g_thresh, int mode)
 		break;
 	default:
 		equalizeHist(image, image);
-		GaussianBlur(image, image, Size(9,9), 3);
+		GaussianBlur(image, image, Size(9,9), 2);
 		sharpen(image, image);
 		threshold(image, image, g_thresh, 255, CV_THRESH_BINARY_INV);
 		info = "Use coarse thresholding";
@@ -278,8 +278,9 @@ bool isAllWhite(Mat image, int r){
 			if(norm(Point2f(i-cx, j-cy)) >= r) continue;
 			if(image.at<uchar>(i,j) == 0) {
 				count ++;
+				//return false;
 			}
-			if(count>0) return false; 
+			if(count>r) return false; 
 		}
 	}
 	return true;
@@ -293,8 +294,8 @@ void refineDefectSize(Mat image, Defect& defect, int y0, int x0){
 	float r;
 	float refined_radius, radius;
 	refined_radius = radius = defect.getDiameter()/2;
-	for(int iter = 0; iter<21; iter++){
-		r = radius*(0.7 + iter*0.1);
+	for(int iter = 0; iter<31; iter++){
+		r = radius*(0.5 + iter*0.1);
 		if(!isAllWhite(image, r)) continue;
 		refined_radius = r;
 	}
