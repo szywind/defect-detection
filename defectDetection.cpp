@@ -84,8 +84,8 @@ void processImage(Mat& image, double g_thresh, int mode)
 		imshow("original", image);
 		waitKey();
 #endif
-		for(int i=0; i<1; i++)
-		morphologyEx(image, image, MORPH_CLOSE, element);//--MORPH_OPEN, --MORPH_BLACKHAT, --MORPH_TOPHAT, -MORPH_GRADIENT, MORPH_CLOSE
+		//for(int i=0; i<1; i++)
+		//morphologyEx(image, image, MORPH_CLOSE, element);//--MORPH_OPEN, --MORPH_BLACKHAT, --MORPH_TOPHAT, -MORPH_GRADIENT, MORPH_CLOSE
 
 #ifdef _DEBUG
 		imshow("morph", image);
@@ -142,7 +142,7 @@ void processImage(Mat& image, double g_thresh, int mode)
 		break;
 	default:
 		equalizeHist(image, image);
-		GaussianBlur(image, image, Size(9,9), 5);
+		GaussianBlur(image, image, Size(9,9), 2);
 		sharpen(image, image);
 		threshold(image, image, g_thresh, 255, CV_THRESH_BINARY_INV);
 		info = "Use coarse thresholding";
@@ -205,12 +205,10 @@ void blobDetection(Mat image, Defect& defect, int y0, int x0){
 	// find contours
 	//resize(patch, patch, Size(1010, 1010), CV_INTER_LINEAR);
 	
-	processImage(image, g_thresh, 2);
-	//imshow("1",image);
-	//waitKey();
-	vector<vector<Point> > contours = getContours(image);
-	//imshow("2",image);
-	//waitKey();
+	processImage(image, g_thresh, 99);
+	Mat temp;
+	image.copyTo(temp);
+	vector<vector<Point> > contours = getContours(temp);
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 	
 	float r;
@@ -280,8 +278,9 @@ bool isAllWhite(Mat image, int r){
 			if(norm(Point2f(i-cx, j-cy)) >= r) continue;
 			if(image.at<uchar>(i,j) == 0) {
 				count ++;
+				//return false;
 			}
-			if(count>7) return false; 
+			if(count>r) return false; 
 		}
 	}
 	return true;
@@ -295,7 +294,7 @@ void refineDefectSize(Mat image, Defect& defect, int y0, int x0){
 	float r;
 	float refined_radius, radius;
 	refined_radius = radius = defect.getDiameter()/2;
-	for(int iter = 0; iter<30; iter++){
+	for(int iter = 0; iter<31; iter++){
 		r = radius*(0.5 + iter*0.1);
 		if(!isAllWhite(image, r)) continue;
 		refined_radius = r;
@@ -392,4 +391,4 @@ void displayResult(Mat image, vector<vector<Point>> contours, String outputImage
 
 	imwrite(outputImageName, result);
    	cout << "SRC:End" << endl;
-}
+ }
