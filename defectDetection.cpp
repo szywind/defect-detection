@@ -20,23 +20,24 @@ void displayResult(Mat image, vector<vector<Point>> contours, String outputImage
 bool isAllWhite(Mat image, int r);
 void refineDefectSize(Mat image, Defect& defect, int y0, int x0);
 
-float g_thresh;
+float g_thresh, g_alpha;
 
 int main(int argc, char* argv[])
 {
 	// load the image
 	string inputImageName, outputImageName;
 	double defect_size, field_width;
-	if (argc != 5 && argc != 6)
+	if (argc != 5 && argc != 6 && argc != 7)
 	{
-		cout << "Usage: DefectDetection.exe <src image path> <dst image path> <field width(in mm)> <threshold of the defects to be detected(in mm)> [<threshold for binarilization>(default is 50)]" << endl;
+		cout << "Usage: DefectDetection.exe <src image path> <dst image path> <field width(in mm)> <threshold of the defects to be detected(in mm)> [<tolerance>(default is 3)] [<threshold for binarilization>(default is 50)]" << endl;
 		return -1;
 	} else {
 		inputImageName = argv[1]; //"..\\data\\real\\1.bmp";
 		outputImageName = argv[2]; //"..\\result\\1.bmp";
 		field_width = atof(argv[3]);
 		defect_size = atof(argv[4]);
-		g_thresh = (argc == 6) ? atof(argv[5]) : 50.0;
+		g_alpha = (argc == 6) ? atof(argv[5]) : 3;
+		g_thresh = (argc == 7) ? atof(argv[6]) : 50.0;
 	}
 
 	// 0.
@@ -142,7 +143,7 @@ void processImage(Mat& image, double g_thresh, int mode)
 		break;
 	default:
 		equalizeHist(image, image);
-		GaussianBlur(image, image, Size(9,9), 2);
+		GaussianBlur(image, image, Size(9,9), 5);
 		sharpen(image, image);
 		threshold(image, image, g_thresh, 255, CV_THRESH_BINARY_INV);
 		info = "Use coarse thresholding";
@@ -280,7 +281,7 @@ bool isAllWhite(Mat image, int r){
 				count ++;
 				//return false;
 			}
-			if(count>r) return false; 
+			if(count>g_alpha*r) return false; 
 		}
 	}
 	return true;
@@ -295,7 +296,7 @@ void refineDefectSize(Mat image, Defect& defect, int y0, int x0){
 	float refined_radius, radius;
 	refined_radius = radius = defect.getDiameter()/2;
 	for(int iter = 0; iter<31; iter++){
-		r = radius*(0.5 + iter*0.1);
+		r = radius*(1.0 + iter*0.1);
 		if(!isAllWhite(image, r)) continue;
 		refined_radius = r;
 	}
